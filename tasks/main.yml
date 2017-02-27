@@ -1,0 +1,77 @@
+---
+# tasks file
+
+# Install few required packages
+- name: "Install openswan xl2tpd ppp lsof"
+  apt: "name={{ item }} state=present"
+  with_items:
+    - openswan
+    - xl2tpd
+    - ppp
+    - lsof
+
+
+# Enable the iptables firewall rules to allow vpn traffic and Enable kernel IP packet forwarding
+- stat:
+    path: /tmp/pkg_forward_cmd.sh
+  register: pkg_forward_cmd_file
+
+- name: Prepare shell script to setup firewall rules
+  template:
+    src: "templates/pkg_forward_cmd.sh.j2"
+    dest: "/tmp/pkg_forward_cmd.sh"
+    mode: 0755
+  when: pkg_forward_cmd_file.stat.exists == False
+
+- name: run the shell scripts setup firewall rules
+  shell: >
+    /tmp/pkg_forward_cmd.sh
+  when: pkg_forward_cmd_file.stat.exists == False
+
+# Persistent permenant firewall rules settings via /etc/rc.local
+- name: Persistent settings via /etc/rc.local
+  blockinfile:
+    dest: /etc/rc.local
+    insertbefore: '^exit 0'
+    block: |
+      for vpn in /proc/sys/net/ipv4/conf/*; do echo 0 > $vpn/accept_redirects; echo 0 > $vpn/send_redirects; done
+      iptables -t nat --append POSTROUTING --jump MASQUERADE
+
+
+# Configure Openswan (IPSEC)
+- name: Configure Openswan (IPSEC)
+  template:
+    src: "templates/ipsec.conf.j2"
+    dest: "/etc/ipsec.conf"
+    mode: 0644
+
+# Configure the shared secret, replace with the ipsec.secrets templates
+- name: Configure the shared secret
+  template:
+    src: "templates/ipsec.secrets.j2"
+    dest: "/etc/ipsec.secrets"
+    mode: 0600
+    force: yes
+  notify: restart ipsec service
+
+# Debug Step: Verify IPSEC Settings via command line
+#- name: Verify IPSEC Settings
+#  shell: ipsec verify
+
+# Configure xl2tpd
+- name: Configure xl2tpd
+  template:
+    src: "templates/xl2tpd.conf.j2"
+    dest: "/etc/xl2tpd/xl2tpd.conf"
+    mode: 0644
+
+# Configuring PPP
+- name: Configuring PPP
+  template:
+    src: "templates/options.xl2tpd.j2"
+    dest: "/etc/ppp/options.xl2tpd"
+    mode: 0644
+  notify: restart xl2tpd service
+
+# Important: then you need manually Adding user to  /etc/ppp/chap-secrets
+

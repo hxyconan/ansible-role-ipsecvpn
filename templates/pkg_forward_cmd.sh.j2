@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# Enable the iptables firewall to allow vpn traffic
+# use --jump MASQUERADE option and the NAT'd address automatically grabbed form the information about the specific interface
+iptables -t nat --append POSTROUTING --jump MASQUERADE
+
+echo "net.ipv4.ip_forward = 1" |  tee -a /etc/sysctl.conf
+echo "net.ipv4.conf.all.accept_redirects = 0" |  tee -a /etc/sysctl.conf
+echo "net.ipv4.conf.all.send_redirects = 0" |  tee -a /etc/sysctl.conf
+echo "net.ipv4.conf.default.rp_filter = 0" |  tee -a /etc/sysctl.conf
+echo "net.ipv4.conf.default.accept_source_route = 0" |  tee -a /etc/sysctl.conf
+echo "net.ipv4.conf.default.send_redirects = 0" |  tee -a /etc/sysctl.conf
+echo "net.ipv4.icmp_ignore_bogus_error_responses = 1" |  tee -a /etc/sysctl.conf
+
+for vpn in /proc/sys/net/ipv4/conf/*; do echo 0 > $vpn/accept_redirects; echo 0 > $vpn/send_redirects; done
+
+sysctl -p
